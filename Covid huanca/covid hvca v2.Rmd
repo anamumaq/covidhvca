@@ -1,0 +1,75 @@
+---
+title: "ggplot2 Diamonds Explorer"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    social: menu
+    source_code: embed
+runtime: shiny
+---
+
+```{r global, include=FALSE}
+# load data in 'global' chunk so it can be shared by all users of the dashboard
+library(readr)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(highcharter)
+library(leaflet)
+
+
+
+covid_bd = read_csv("https://cloud.minsa.gob.pe/s/Y8w3wHsEdYQSZRp/download")
+
+XY_HVCA <- read_csv("XY HVCA.csv")
+
+
+################ clean dataset
+
+covid_bd = filter(covid_bd, covid_bd$DEPARTAMENTO == "HUANCAVELICA")
+covid_bd = select(covid_bd, -UUID, -DEPARTAMENTO)
+
+Encoding(covid_bd$PROVINCIA)= "latin1"
+Encoding(covid_bd$DISTRITO)= "latin1"
+
+
+
+covid_bd$FECHA_RESULTADO = as.character(covid_bd$FECHA_RESULTADO)
+
+
+covid_bd$FECHA_RESULTADO = 
+  str_c(
+  str_sub(covid_bd$FECHA_RESULTADO, 1, 4), "-",
+  str_sub(covid_bd$FECHA_RESULTADO, 5, 6), "-",
+  str_sub(covid_bd$FECHA_RESULTADO, 7, 8))
+
+covid_bd$FECHA_RESULTADO = as.Date(covid_bd$FECHA_RESULTADO)
+
+covid_bd = merge(covid_bd, XY_HVCA[,2:4], by = "DISTRITO", all.x = TRUE)
+
+```
+
+Inputs {.sidebar}
+-----------------------------------------------------------------------
+
+```{r}
+sliderInput('sampleSize', 'Sample Size', min= min(covid_bd$FECHA_RESULTADO), max=min(covid_bd$FECHA_RESULTADO),
+            value = min(covid_bd$FECHA_RESULTADO))
+
+selectInput('x', 'X', names(covid_bd), names(covid_bd)[[1]])
+selectInput('y', 'Y', names(covid_bd), names(covid_bd)[[2]])
+selectInput('Z', 'Z', names(covid_bd), names(covid_bd)[[3]])
+selectInput('W', 'W', names(covid_bd), names(covid_bd)[[5]])
+
+```
+
+Outputs
+-----------------------------------------------------------------------
+
+### Diamonds
+
+```{r}
+
+  hchart(input$Y, name = "Precio")
+
+```

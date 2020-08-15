@@ -1,0 +1,10 @@
+name: Publish Document
+title:
+username:
+account: rpubs
+server: rpubs.com
+hostUrl: rpubs.com
+appId: https://api.rpubs.com/api/v1/document/647385/7c19bb7a326f433b9c2d977eb7e4eb5c
+bundleId: https://api.rpubs.com/api/v1/document/647385/7c19bb7a326f433b9c2d977eb7e4eb5c
+url: http://rpubs.com/anamumaq/647385
+when: 1597461593.09623

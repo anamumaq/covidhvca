@@ -1,0 +1,598 @@
+---
+title: "COVID HUANCAVELICA"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: scroll
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(readr)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(highcharter)
+library(leaflet)
+library(lubridate)
+
+
+
+covid_bd = read_csv("https://cloud.minsa.gob.pe/s/Y8w3wHsEdYQSZRp/download")
+
+XY_HVCA <- read_csv("XY HVCA.csv")
+
+
+     ########################PREPARACION DEDATA###############################
+covid_bd = filter(covid_bd, covid_bd$DEPARTAMENTO == "HUANCAVELICA")
+covid_bd = select(covid_bd, -UUID, -DEPARTAMENTO)
+
+Encoding(covid_bd$PROVINCIA)= "latin1"
+Encoding(covid_bd$DISTRITO)= "latin1"
+
+
+
+covid_bd$FECHA_RESULTADO = as.character(covid_bd$FECHA_RESULTADO)
+
+
+covid_bd$FECHA_RESULTADO = 
+  str_c(
+  str_sub(covid_bd$FECHA_RESULTADO, 1, 4), "-",
+  str_sub(covid_bd$FECHA_RESULTADO, 5, 6), "-",
+  str_sub(covid_bd$FECHA_RESULTADO, 7, 8))
+
+covid_bd$FECHA_RESULTADO = 
+    as.Date(covid_bd$FECHA_RESULTADO)
+
+covid_bd = merge(covid_bd, XY_HVCA[,2:4], by = "DISTRITO", all.x = TRUE)
+
+```
+
+Generales {data-icon="ion-arrow-graph-up-right"}
+=============================
+
+Row
+-----------------------------------------------------------------------
+
+### Fecha Actualizacion
+
+```{r}
+valueBox(
+     format(max(covid_bd$FECHA_RESULTADO),"%d/%m/%y"),
+    icon = "ion-android-calendar",
+    color = "info")
+
+```
+
+### Positivos a la fecha
+
+```{r}
+pos_hvca  = covid_bd %>%
+  summarise(positivos = n())
+
+valueBox(
+  pos_hvca, 
+  icon = "ion-ios-plus")
+```
+
+### Promedio de Edad
+
+```{r}
+edad_prom = round(mean(covid_bd$EDAD),2)
+
+valueBox(edad_prom, icon = "ion-android-person-add")
+```
+
+### Provincia con mas positivos
+
+```{r}
+
+pos_hvca  = covid_bd %>%
+  group_by(PROVINCIA)%>%
+  summarise(positivos = n())%>%
+  filter(positivos == max(positivos))
+
+
+valueBox(pos_hvca, icon = "ion-android-warning")
+```
+
+Row {data-height=300}
+-----------------------------------------------------------------------
+
+### Positivos por Genero
+
+```{r}
+pos_hvca  = covid_bd %>%
+  group_by(SEXO)%>%
+  summarise(positivos = n())
+
+pos_hvca %>% 
+  hchart('bar', hcaes(x = SEXO, y = positivos), name ='Positivos')%>%
+  hc_add_theme(hc_theme_sandsignika())%>%
+  hc_tooltip(crosshairs = TRUE)
+```
+
+### Positivos por Metodo Diagnostico
+
+```{r}
+pos_hvca  = covid_bd %>%
+  group_by(METODODX)%>%
+  summarise(positivos = n())
+
+pos_hvca %>% 
+  hchart('bar', hcaes(x = METODODX, y = positivos), name ='Positivos')%>%
+  hc_add_theme(hc_theme_sandsignika())%>%
+  hc_tooltip(crosshairs = TRUE)
+
+```
+
+
+### Edad por Genero
+
+```{r}
+hcboxplot(
+  x = covid_bd$EDAD,
+  var = covid_bd$SEXO, name ='Positivos')%>%
+  hc_add_theme(hc_theme_sandsignika())%>%
+  hc_chart(type = "column")
+
+```
+
+Row {.tabset}
+-----------------------------------------------------------------------
+
+### Historial de Pruebas Positivas por Dia
+
+```{r}
+pos_hvca  = covid_bd %>%
+  group_by(FECHA_RESULTADO)%>%
+  summarise(positivos = n())
+
+highchart(type = "stock") %>%
+    hc_add_series(pos_hvca, type = "area", hcaes(pos_hvca$FECHA_RESULTADO, pos_hvca$positivos), name = "positivos")%>%
+    hc_xAxis(type = 'datetime', labels = list(format = '{value:%b %d}')) %>%
+    hc_add_theme(hc_theme_sandsignika())%>%
+    hc_tooltip(crosshairs = TRUE)
+
+```
+
+### Historial de Pruebas Positivas Semanal
+
+```{r}
+pos_hvca = covid_bd %>% 
+  group_by(semana = floor_date(FECHA_RESULTADO, "week")) %>%
+  summarize(positivos = n())
+
+hchart(pos_hvca, "spline", 
+  hcaes(x = semana,
+    y = positivos), name ='Positivos')
+
+```
+
+Provincias {data-icon="ion-android-locate"}
+=============================
+
+Row
+-----------------------------------------------------------------------
+
+### Pruebas Positivas por Provincia
+
+```{r}
+pos_hvca  = covid_bd %>%
+  group_by(PROVINCIA)%>%
+  summarise(positivos = n())
+
+
+hchart(pos_hvca, "bar", 
+  hcaes(x = PROVINCIA,
+        y = positivos), name ='Positivos')%>%
+  hc_add_theme(hc_theme_sandsignika())%>%
+  hc_tooltip(crosshairs = TRUE)
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Historico Positivo del Top 3 Provincias
+
+```{r}
+pos_hvca  = covid_bd %>%
+  group_by(PROVINCIA)%>%
+  summarise(positivos = n())%>%
+  top_n(3,positivos)
+
+
+top_hvca  = covid_bd %>%
+  merge(pos_hvca, by = "PROVINCIA")%>%
+  group_by(FECHA_RESULTADO, PROVINCIA)%>%
+  summarise(positivos = n())
+
+
+top_hvca %>%
+hchart("spline", 
+  hcaes(x = FECHA_RESULTADO, y = positivos, group = PROVINCIA))%>%
+  hc_add_theme(hc_theme_sandsignika())%>%
+  hc_tooltip(crosshairs = TRUE)
+```
+
+
+
+Top Provincias {data-icon="ion-stats-bars"}
+=============================
+
+column
+-----------------------------------------------------------------------
+
+### Provincia Top 1
+
+```{r}
+
+pos_hvca  = covid_bd %>%
+  group_by(PROVINCIA)%>%
+  summarise(positivos = n())%>%
+  top_n(1,positivos)
+
+
+valueBox(pos_hvca, icon = "ion-android-warning")
+```
+
+
+Column {.tabset}
+-------------------------------------
+
+### Distritos Provincia Top 1
+
+```{r}
+
+pos_hvca  = covid_bd %>%
+  group_by(PROVINCIA)%>%
+  summarise(positivos = n())%>%
+  top_n(1,positivos)
+
+top_hvca  = covid_bd %>%
+  filter(PROVINCIA == pos_hvca$PROVINCIA)%>%
+  group_by(DISTRITO)%>%
+  summarise(positivos = n())
+
+hchart(top_hvca, "bar", 
+  hcaes(x = DISTRITO,
+    y = positivos), name ='Positivos')%>%
+  hc_add_theme(hc_theme_sandsignika())%>%
+  hc_tooltip(crosshairs = TRUE)
+
+```
+
+### Positivos por Genero
+
+```{r}
+
+pos_hvca  = covid_bd %>%
+  group_by(PROVINCIA)%>%
+  summarise(positivos = n())%>%
+  top_n(1,positivos)
+
+top_hvca  = covid_bd %>%
+  filter(PROVINCIA == pos_hvca$PROVINCIA)%>%
+  group_by(SEXO)%>%
+  summarise(positivos = n())
+
+top_hvca %>% 
+  hchart('bar', hcaes(x = SEXO, y = positivos), name ='Positivos')%>%
+  hc_add_theme(hc_theme_sandsignika())%>%
+  hc_tooltip(crosshairs = TRUE)
+
+```
+
+
+### Positivos por Metodo Diagnostico
+
+```{r}
+
+pos_hvca  = covid_bd %>%
+  group_by(PROVINCIA)%>%
+  summarise(positivos = n())%>%
+  top_n(1,positivos)
+
+top_hvca  = covid_bd %>%
+  filter(PROVINCIA == pos_hvca$PROVINCIA)%>%
+  group_by(METODODX)%>%
+  summarise(positivos = n())
+
+top_hvca %>% 
+  hchart('bar', hcaes(x = METODODX, y = positivos), name ='Positivos')%>%
+  hc_add_theme(hc_theme_sandsignika())%>%
+  hc_tooltip(crosshairs = TRUE)
+```
+
+### Edad por Genero
+
+```{r}
+pos_hvca  = covid_bd %>%
+  group_by(PROVINCIA)%>%
+  summarise(positivos = n())%>%
+  top_n(1,positivos)
+
+top_hvca  = covid_bd %>%
+  filter(PROVINCIA == pos_hvca$PROVINCIA)
+
+hcboxplot(x = top_hvca$EDAD, var = top_hvca$SEXO, name = 'Positivos')%>%
+  hc_add_theme(hc_theme_sandsignika())
+
+```
+
+Column
+-----------------------------------------------------------------------
+
+### Provincia Top2
+
+```{r}
+
+pos_hvca  = covid_bd %>%
+  group_by(PROVINCIA)%>%
+  summarise(positivos = n())%>%
+  top_n(2, positivos)%>%
+  top_n(-1, positivos)
+
+
+valueBox(pos_hvca, icon = "ion-android-warning")
+```
+
+Column {.tabset}
+-------------------------------------
+### Distritos Provincia Top 2
+
+```{r}
+
+pos_hvca  = covid_bd %>%
+  group_by(PROVINCIA)%>%
+  summarise(positivos = n())%>%
+  top_n(2, positivos)%>%
+  top_n(-1, positivos)
+  
+
+top_hvca  = covid_bd %>%
+  filter(PROVINCIA == pos_hvca$PROVINCIA)%>%
+  group_by(DISTRITO)%>%
+  summarise(positivos = n())
+
+hchart(top_hvca, "bar", 
+  hcaes(x = DISTRITO,
+    y = positivos), name ='Positivos')%>%
+  hc_add_theme(hc_theme_sandsignika())%>%
+  hc_tooltip(crosshairs = TRUE)
+
+```
+
+### Positivos por Genero
+
+```{r}
+
+pos_hvca  = covid_bd %>%
+  group_by(PROVINCIA)%>%
+  summarise(positivos = n())%>%
+  top_n(2, positivos)%>%
+  top_n(-1, positivos)
+
+top_hvca  = covid_bd %>%
+  filter(PROVINCIA == pos_hvca$PROVINCIA)%>%
+  group_by(SEXO)%>%
+  summarise(positivos = n())
+
+top_hvca %>% 
+  hchart('bar', hcaes(x = SEXO, y = positivos), name ='Positivos')%>%
+  hc_add_theme(hc_theme_sandsignika())%>%
+  hc_tooltip(crosshairs = TRUE)
+
+```
+
+
+### Positivos por Metodo Diagnostico
+
+```{r}
+
+pos_hvca  = covid_bd %>%
+  group_by(PROVINCIA)%>%
+  summarise(positivos = n())%>%
+  top_n(2, positivos)%>%
+  top_n(-1, positivos)
+
+top_hvca  = covid_bd %>%
+  filter(PROVINCIA == pos_hvca$PROVINCIA)%>%
+  group_by(METODODX)%>%
+  summarise(positivos = n())
+
+top_hvca %>% 
+  hchart('bar', hcaes(x = METODODX, y = positivos), name ='Positivos')%>%
+  hc_add_theme(hc_theme_sandsignika())%>%
+  hc_tooltip(crosshairs = TRUE)
+
+```
+
+### Edad por Genero
+
+```{r}
+pos_hvca  = covid_bd %>%
+  group_by(PROVINCIA)%>%
+  summarise(positivos = n())%>%
+  top_n(2, positivos)%>%
+  top_n(-1, positivos)
+
+top_hvca  = covid_bd %>%
+  filter(PROVINCIA == pos_hvca$PROVINCIA)
+
+hcboxplot(x = top_hvca$EDAD, var = top_hvca$SEXO, name = 'Positivos')%>%
+  hc_add_theme(hc_theme_sandsignika())
+
+```
+
+Column
+-----------------------------------------------------------------------
+
+### Provincia Top 3
+
+```{r}
+
+pos_hvca  = covid_bd %>%
+  group_by(PROVINCIA)%>%
+  summarise(positivos = n())%>%
+  top_n(3, positivos)%>%
+  top_n(-1, positivos)
+
+
+valueBox(pos_hvca, icon = "ion-android-warning")
+```
+
+
+Column {.tabset}
+-------------------------------------
+
+### Distritos Provincia Top 3
+
+```{r}
+
+pos_hvca  = covid_bd %>%
+  group_by(PROVINCIA)%>%
+  summarise(positivos = n())%>%
+  top_n(3, positivos)%>%
+  top_n(-1, positivos)
+
+top_hvca  = covid_bd %>%
+  filter(PROVINCIA == pos_hvca$PROVINCIA)%>%
+  group_by(DISTRITO)%>%
+  summarise(positivos = n())
+
+hchart(top_hvca, "bar", 
+  hcaes(x = DISTRITO,
+    y = positivos), name ='Positivos')%>%
+  hc_add_theme(hc_theme_sandsignika())%>%
+  hc_tooltip(crosshairs = TRUE)
+
+```
+
+### Positivos por Genero
+
+```{r}
+
+pos_hvca  = covid_bd %>%
+  group_by(PROVINCIA)%>%
+  summarise(positivos = n())%>%
+  top_n(3, positivos)%>%
+  top_n(-1, positivos)
+
+top_hvca  = covid_bd %>%
+  filter(PROVINCIA == pos_hvca$PROVINCIA)%>%
+  group_by(SEXO)%>%
+  summarise(positivos = n())
+
+top_hvca %>% 
+  hchart('bar', hcaes(x = SEXO, y = positivos), name ='Positivos')%>%
+  hc_add_theme(hc_theme_sandsignika())%>%
+  hc_tooltip(crosshairs = TRUE)
+
+```
+
+
+### Positivos por Metodo Diagnostico
+
+```{r}
+
+pos_hvca  = covid_bd %>%
+  group_by(PROVINCIA)%>%
+  summarise(positivos = n())%>%
+  top_n(3, positivos)%>%
+  top_n(-1, positivos)
+
+top_hvca  = covid_bd %>%
+  filter(PROVINCIA == pos_hvca$PROVINCIA)%>%
+  group_by(METODODX)%>%
+  summarise(positivos = n())
+
+top_hvca %>% 
+  hchart('bar', hcaes(x = METODODX, y = positivos), name ='Positivos')%>%
+  hc_add_theme(hc_theme_sandsignika())%>%
+  hc_tooltip(crosshairs = TRUE)
+
+```
+
+### Edad por Genero
+
+```{r}
+pos_hvca  = covid_bd %>%
+  group_by(PROVINCIA)%>%
+  summarise(positivos = n())%>%
+  top_n(3, positivos)%>%
+  top_n(-1, positivos)
+
+top_hvca  = covid_bd %>%
+  filter(PROVINCIA == pos_hvca$PROVINCIA)
+
+hcboxplot(x = top_hvca$EDAD, var = top_hvca$SEXO, name = 'Positivos')%>%
+  hc_add_theme(hc_theme_sandsignika())
+
+```
+
+Mapa Positivos {data-icon="ion-android-pin"}
+=============================
+
+Column {.tabset}
+-------------------------------------
+   
+### Mapa Positivos Agrupado 
+
+```{r}
+
+pos_hvca5  = covid_bd %>%
+  group_by(DISTRITO, lat, long)%>%
+  summarise(positivos = n())
+
+
+leaflet(covid_bd) %>%
+  addTiles() %>%  # Add default OpenStreetMap map tiles
+  addMarkers( clusterOptions = markerClusterOptions(),
+    popup =~paste0("Positivas: ",pos_hvca5$positivos," En: ", pos_hvca5$DISTRITO))
+
+#%>%  addPopups(popup= ~paste0("pruebas positivas:", pos_hvca5$PROVINCIA))
+
+```   
+ 
+### Mapa Positivos por Distrito 
+    
+```{r}
+
+pos_hvca5  = covid_bd %>%
+  group_by(DISTRITO, lat, long)%>%
+  summarise(positivos = n())
+
+leaflet(pos_hvca5) %>%
+  addTiles() %>%  # Add default OpenStreetMap map tiles
+  addMarkers(pos_hvca5$long, pos_hvca5$lat, popup= ~paste0("Positivas: ",positivos,"En: ", DISTRITO))
+```
+
+Columns {data-height=400}
+-------------------------------------
+
+### Informacion Adicional
+
+FUENTES
+
+- Info tomada del Ministerio de Salud mediante el portal de Datos Abiertos.
+Source: https://www.datosabiertos.gob.pe/dataset/casos-positivos-por-covid-19-ministerio-de-salud-minsa 
+
+- Ubicacion de distritos tomada del Directorio Nacional de Municipalidades Provinciales y Distritales del INEI 
+Source:  https://www.inei.gob.pe/media/MenuRecursivo/publicaciones_digitales/Est/Lib1653/index.html
+
+
+CONSIDERACIONES
+
+- Los datos publicados, corresponden al total de casos reportados que dieron positivo al COVID – 19, por departamento, provincia y distrito
+
+- Desde el 02/06 lo casos por PR no incluye las IPRESS privadas que realizan tamizaje a trabajadores de empresas en el marco de la reactivacion economica, debido a que el objetivo de este tamizaje NO permite identificar casos nuevos en personas sospechosas
+
+- El recurso presenta provincias con "EN INVESITGACION" que no son tomados en cuenta para en el Mapa, estos representan aprox el 10% de la informacion
+
+- En Metodo de diagnostico PR = Prueba Rapida, PCR = Prueba de reaccion en cadena de la Poliomerasa 
+
+- Actualizacion diaria segun reporte del portal
+
+- Las tildes en este reporte han sido omitidas intencionamente
+
